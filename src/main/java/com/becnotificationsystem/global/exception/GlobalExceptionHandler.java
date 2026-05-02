@@ -34,6 +34,14 @@ public class GlobalExceptionHandler {
                 .body(CommonApiResponse.fail("INVALID_INPUT", message));
     }
 
+    @ExceptionHandler(org.springframework.web.bind.ServletRequestBindingException.class)
+    public ResponseEntity<CommonApiResponse<Void>> handleBindingException(org.springframework.web.bind.ServletRequestBindingException e) {
+        log.warn("BindingException: {}", e.getMessage());
+        return ResponseEntity
+                .badRequest()
+                .body(CommonApiResponse.fail("INVALID_INPUT", e.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<CommonApiResponse<Void>> handleException(Exception e) {
         log.error("Unhandled exception", e);
