@@ -40,4 +40,28 @@ public class NotificationInfo {
             );
         }
     }
+
+    public record ListItem(
+            Long notificationId,
+            NotificationType notificationType,
+            NotificationChannel channel,
+            NotificationStatus status,
+            boolean isRead,
+            String message,
+            LocalDateTime sentAt,
+            LocalDateTime createdAt
+    ) {
+        public static ListItem from(Notification notification, String message) {
+            return new ListItem(
+                    notification.getId(),
+                    notification.getNotificationType(),
+                    notification.getChannel(),
+                    notification.getStatus(),
+                    notification.getStatus() == NotificationStatus.READ,
+                    message,
+                    notification.getSentAt(),
+                    notification.getCreatedAt()
+            );
+        }
+    }
 }

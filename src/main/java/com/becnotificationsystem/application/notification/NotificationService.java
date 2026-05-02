@@ -1,10 +1,14 @@
 package com.becnotificationsystem.application.notification;
 
+import com.becnotificationsystem.application.notification.NotificationInfo.ListItem;
 import com.becnotificationsystem.domain.notification.*;
+import com.becnotificationsystem.global.common.response.PageResponse;
 import com.becnotificationsystem.global.exception.BusinessException;
 import com.becnotificationsystem.global.exception.ErrorCode;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +46,21 @@ public class NotificationService {
         Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
         return NotificationInfo.Detail.from(notification);
+    }
+
+    public PageResponse<ListItem> findByReceiverId(Long receiverId, Boolean readFilter, Pageable pageable) {
+        Page<Notification> notificationPage;
+        if (readFilter == null) {
+            notificationPage = notificationRepository.findByReceiverIdAndDeletedFalse(receiverId, pageable);
+        } else if (readFilter) {
+            notificationPage = notificationRepository.findByReceiverIdAndStatusAndDeletedFalse(
+                    receiverId, NotificationStatus.READ, pageable);
+        } else {
+            notificationPage = notificationRepository.findByReceiverIdAndStatusAndDeletedFalse(
+                    receiverId, NotificationStatus.SENT, pageable);
+        }
+
+        return PageResponse.from(notificationPage.map(n -> NotificationInfo.ListItem.from(n, null)));
     }
 
 }
