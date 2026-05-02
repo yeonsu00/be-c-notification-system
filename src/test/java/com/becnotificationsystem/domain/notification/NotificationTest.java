@@ -3,6 +3,7 @@ package com.becnotificationsystem.domain.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -163,6 +164,121 @@ class NotificationTest {
 
             // assert
             assertThat(key1).isNotEqualTo(key2);
+        }
+    }
+
+    @DisplayName("상태 전이 메서드를 호출할 때,")
+    @Nested
+    class StatusTransition {
+
+        private Notification createPendingNotification() {
+            return Notification.of(1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.EMAIL,
+                    100L, "ORDER", "test-key", null);
+        }
+
+        @DisplayName("startProcessing()을 호출하면 PROCESSING 상태로 전이된다.")
+        @Test
+        void transitionsToProcessing_whenStartProcessingCalled() {
+            // arrange
+            Notification notification = createPendingNotification();
+
+            // act
+            notification.startProcessing();
+
+            // assert
+            assertThat(notification.getStatus()).isEqualTo(NotificationStatus.PROCESSING);
+        }
+
+        @DisplayName("markAsSent()을 호출하면 SENT 상태가 되고 sentAt이 설정된다.")
+        @Test
+        void transitionsToSent_whenMarkAsSentCalled() {
+            // arrange
+            Notification notification = createPendingNotification();
+            notification.startProcessing();
+            LocalDateTime before = LocalDateTime.now();
+
+            // act
+            notification.markAsSent();
+
+            // assert
+            assertAll(
+                    () -> assertThat(notification.getStatus()).isEqualTo(NotificationStatus.SENT),
+                    () -> assertThat(notification.getSentAt()).isNotNull(),
+                    () -> assertThat(notification.getSentAt()).isAfterOrEqualTo(before)
+            );
+        }
+
+        @DisplayName("markAsFailed()을 호출하면 FAILED 상태가 되고 retryCount가 증가하며 failureReason이 설정된다.")
+        @Test
+        void transitionsToFailed_whenMarkAsFailedCalled() {
+            // arrange
+            Notification notification = createPendingNotification();
+            notification.startProcessing();
+
+            // act
+            notification.markAsFailed("connection timeout");
+
+            // assert
+            assertAll(
+                    () -> assertThat(notification.getStatus()).isEqualTo(NotificationStatus.FAILED),
+                    () -> assertThat(notification.getRetryCount()).isEqualTo(1),
+                    () -> assertThat(notification.getFailureReason()).isEqualTo("connection timeout")
+            );
+        }
+
+        @DisplayName("markAsDeadLetter()을 호출하면 DEAD_LETTER 상태로 전이된다.")
+        @Test
+        void transitionsToDeadLetter_whenMarkAsDeadLetterCalled() {
+            // arrange
+            Notification notification = createPendingNotification();
+            notification.startProcessing();
+            notification.markAsFailed("error");
+
+            // act
+            notification.markAsDeadLetter();
+
+            // assert
+            assertThat(notification.getStatus()).isEqualTo(NotificationStatus.DEAD_LETTER);
+        }
+
+        @DisplayName("canRetry()는 retryCount가 maxRetryCount보다 작으면 true를 반환한다.")
+        @Test
+        void returnsTrue_whenRetryCountLessThanMax() {
+            // arrange
+            Notification notification = createPendingNotification();
+
+            // act & assert
+            assertThat(notification.canRetry()).isTrue();
+        }
+
+        @DisplayName("canRetry()는 retryCount가 maxRetryCount 이상이면 false를 반환한다.")
+        @Test
+        void returnsFalse_whenRetryCountReachesMax() {
+            // arrange
+            Notification notification = createPendingNotification();
+            notification.startProcessing();
+            notification.markAsFailed("err");
+            notification.startProcessing();
+            notification.markAsFailed("err");
+            notification.startProcessing();
+            notification.markAsFailed("err");
+
+            // act & assert
+            assertThat(notification.canRetry()).isFalse();
+        }
+
+        @DisplayName("resetToPending()을 호출하면 PENDING 상태로 복구된다.")
+        @Test
+        void resetsToPending_whenResetToPendingCalled() {
+            // arrange
+            Notification notification = createPendingNotification();
+            notification.startProcessing();
+
+            // act
+            notification.resetToPending();
+
+            // assert
+            assertThat(notification.getStatus()).isEqualTo(NotificationStatus.PENDING);
         }
     }
 }
