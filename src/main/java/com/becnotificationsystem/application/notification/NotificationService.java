@@ -1,6 +1,8 @@
 package com.becnotificationsystem.application.notification;
 
 import com.becnotificationsystem.domain.notification.*;
+import com.becnotificationsystem.global.exception.BusinessException;
+import com.becnotificationsystem.global.exception.ErrorCode;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -34,6 +36,12 @@ public class NotificationService {
         );
 
         return NotificationInfo.Detail.from(notificationRepository.save(notification));
+    }
+
+    public NotificationInfo.Detail findById(Long notificationId) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        return NotificationInfo.Detail.from(notification);
     }
 
 }

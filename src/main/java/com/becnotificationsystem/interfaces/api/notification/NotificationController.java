@@ -21,4 +21,10 @@ public class NotificationController {
             @Valid @RequestBody NotificationCreateRequest request) {
         return CommonApiResponse.success(notificationService.register(request), "알림 발송 요청이 접수되었습니다.");
     }
+
+    @GetMapping("/{notificationId}")
+    public CommonApiResponse<NotificationInfo.Detail> getStatus(
+            @PathVariable Long notificationId) {
+        return CommonApiResponse.success(notificationService.findById(notificationId), "조회 성공");
+    }
 }
