@@ -6,18 +6,24 @@ import com.becnotificationsystem.global.common.response.PageResponse;
 import com.becnotificationsystem.global.exception.BusinessException;
 import com.becnotificationsystem.global.exception.ErrorCode;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final ApplicationEventPublisher eventPublisher;
+    private final List<NotificationSender> senders;
 
     @Transactional
     public NotificationInfo.Detail register(NotificationCreateRequest request) {
@@ -39,7 +45,9 @@ public class NotificationService {
                 request.scheduledAt()
         );
 
-        return NotificationInfo.Detail.from(notificationRepository.save(notification));
+        NotificationInfo.Detail result = NotificationInfo.Detail.from(notificationRepository.save(notification));
+        eventPublisher.publishEvent(NotificationCreatedEvent.of(result.notificationId()));
+        return result;
     }
 
     public NotificationInfo.Detail findById(Long notificationId) {
@@ -61,6 +69,42 @@ public class NotificationService {
         }
 
         return PageResponse.from(notificationPage.map(n -> NotificationInfo.ListItem.from(n, null)));
+    }
+
+    @Transactional
+    public void process(Long notificationId) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        if (!notification.isProcessable()) {
+            log.debug("처리 불가능한 상태의 알림입니다. notificationId={}, status={}", notificationId, notification.getStatus());
+            return;
+        }
+
+        int updated = notificationRepository.compareAndSwap(notificationId, notification.getStatus(), NotificationStatus.PROCESSING);
+        if (updated == 0) {
+            log.debug("다른 인스턴스가 이미 처리 중입니다. notificationId={}", notificationId);
+            return;
+        }
+
+        notification.startProcessing();
+
+        NotificationSender sender = senders.stream()
+                .filter(s -> s.support() == notification.getChannel())
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_NOT_SUPPORTED));
+
+        try {
+            sender.send(notification);
+            notification.markAsSent();
+        } catch (Exception e) {
+            notification.markAsFailed(e.getMessage());
+            if (!notification.canRetry()) {
+                notification.markAsDeadLetter();
+            }
+        }
+
+        notificationRepository.save(notification);
     }
 
 }
