@@ -26,6 +26,14 @@ public class CommonApiResponse<T> {
                 .build();
     }
 
+    public static <T> CommonApiResponse<T> success(T data, String message) {
+        return CommonApiResponse.<T>builder()
+                .code(ResponseCode.SUCCESS.getCode())
+                .message(message)
+                .data(data)
+                .build();
+    }
+
     public static <T> CommonApiResponse<T> fail(ErrorCode errorCode) {
         return CommonApiResponse.<T>builder()
                 .code(errorCode.getCode())
