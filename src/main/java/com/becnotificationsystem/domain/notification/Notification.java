@@ -100,6 +100,37 @@ public class Notification extends BaseEntity {
                 .build();
     }
 
+    public boolean isProcessable() {
+        return status == NotificationStatus.PENDING || status == NotificationStatus.FAILED;
+    }
+
+    public void startProcessing() {
+        this.status = NotificationStatus.PROCESSING;
+    }
+
+    public void markAsSent() {
+        this.status = NotificationStatus.SENT;
+        this.sentAt = LocalDateTime.now();
+    }
+
+    public void markAsFailed(String reason) {
+        this.retryCount++;
+        this.failureReason = reason;
+        this.status = NotificationStatus.FAILED;
+    }
+
+    public void markAsDeadLetter() {
+        this.status = NotificationStatus.DEAD_LETTER;
+    }
+
+    public boolean canRetry() {
+        return retryCount < maxRetryCount;
+    }
+
+    public void resetToPending() {
+        this.status = NotificationStatus.PENDING;
+    }
+
     public static String generateIdempotencyKey(Long receiverId, NotificationType notificationType,
                                                 Long referenceId, String referenceType,
                                                 NotificationChannel channel) {
