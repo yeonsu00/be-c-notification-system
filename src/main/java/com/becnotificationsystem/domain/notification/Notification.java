@@ -2,6 +2,9 @@ package com.becnotificationsystem.domain.notification;
 
 import com.becnotificationsystem.global.common.entity.BaseEntity;
 import jakarta.persistence.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -95,5 +98,22 @@ public class Notification extends BaseEntity {
                 .scheduledAt(scheduledAt)
                 .deleted(false)
                 .build();
+    }
+
+    public static String generateIdempotencyKey(Long receiverId, NotificationType notificationType,
+                                                Long referenceId, String referenceType,
+                                                NotificationChannel channel) {
+        String raw = receiverId + ":" + notificationType.name() + ":" + referenceId + ":" + referenceType + ":" + channel.name();
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 }
