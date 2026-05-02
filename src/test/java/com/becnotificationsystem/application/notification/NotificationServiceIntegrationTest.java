@@ -16,6 +16,8 @@ import com.becnotificationsystem.global.exception.BusinessException;
 import com.becnotificationsystem.global.exception.ErrorCode;
 import com.becnotificationsystem.infrastructure.notification.NotificationJpaRepository;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
+import com.becnotificationsystem.interfaces.listener.NotificationEventListener;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -38,6 +40,9 @@ class NotificationServiceIntegrationTest {
 
     @Autowired
     private NotificationJpaRepository notificationJpaRepository;
+
+    @MockitoBean
+    private NotificationEventListener notificationEventListener;
 
     @AfterEach
     void tearDown() {
