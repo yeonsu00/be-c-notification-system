@@ -24,6 +24,7 @@ public class NotificationFacade {
     private final TaskScheduler taskScheduler;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Transactional
     public NotificationInfo.Detail register(NotificationCreateRequest request) {
         NotificationInfo.Detail result = notificationService.register(request);
         if (NotificationStatus.isPending(result.status())) {
