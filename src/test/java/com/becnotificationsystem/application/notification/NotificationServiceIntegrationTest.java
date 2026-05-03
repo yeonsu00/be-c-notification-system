@@ -199,6 +199,7 @@ class NotificationServiceIntegrationTest {
             // assert
             assertThat(result.content()).hasSize(2);
             assertThat(result.totalElements()).isEqualTo(2);
+            assertThat(result.content()).allSatisfy(item -> assertThat(item.message()).isNotEmpty());
         }
 
         @DisplayName("readFilter가 false이면 SENT 상태의 알림만 반환한다.")
