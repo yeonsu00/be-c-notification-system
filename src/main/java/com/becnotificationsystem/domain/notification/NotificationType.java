@@ -1,5 +1,6 @@
 package com.becnotificationsystem.domain.notification;
 
+import java.util.Map;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -14,4 +15,12 @@ public enum NotificationType {
 
     private final String title;
     private final String bodyTemplate;
+
+    public String render(Map<String, String> variables) {
+        String body = bodyTemplate;
+        for (Map.Entry<String, String> entry : variables.entrySet()) {
+            body = body.replace("{" + entry.getKey() + "}", entry.getValue());
+        }
+        return body;
+    }
 }

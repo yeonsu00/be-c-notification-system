@@ -7,6 +7,7 @@ import com.becnotificationsystem.global.exception.BusinessException;
 import com.becnotificationsystem.global.exception.ErrorCode;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -70,7 +71,8 @@ public class NotificationService {
                     receiverId, NotificationStatus.SENT, pageable);
         }
 
-        return PageResponse.from(notificationPage.map(n -> NotificationInfo.ListItem.from(n, null)));
+        return PageResponse.from(notificationPage.map(n ->
+                NotificationInfo.ListItem.from(n, n.getNotificationType().render(Map.of()))));
     }
 
     @Transactional
