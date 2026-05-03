@@ -1,8 +1,10 @@
 package com.becnotificationsystem.application.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import com.becnotificationsystem.domain.notification.Notification;
@@ -11,10 +13,13 @@ import com.becnotificationsystem.domain.notification.NotificationStatus;
 import com.becnotificationsystem.domain.notification.NotificationType;
 import com.becnotificationsystem.domain.sendlog.NotificationSendLog;
 import com.becnotificationsystem.domain.sendlog.SendLogResult;
+import com.becnotificationsystem.infrastructure.notification.EmailNotificationSender;
+import com.becnotificationsystem.infrastructure.notification.InAppNotificationSender;
 import com.becnotificationsystem.infrastructure.notification.NotificationJpaRepository;
 import com.becnotificationsystem.infrastructure.sendlog.NotificationSendLogJpaRepository;
 import com.becnotificationsystem.interfaces.listener.NotificationEventListener;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +48,12 @@ class NotificationFacadeIntegrationTest {
 
     @MockitoSpyBean
     private NotificationService notificationService;
+
+    @MockitoSpyBean
+    private EmailNotificationSender emailNotificationSender;
+
+    @MockitoSpyBean
+    private InAppNotificationSender inAppNotificationSender;
 
     @MockitoBean
     private NotificationEventListener notificationEventListener;
@@ -113,6 +124,58 @@ class NotificationFacadeIntegrationTest {
 
         // assert
         verify(notificationService, atLeastOnce()).sendNotification(notification.getId());
+    }
+
+    @Test
+    @DisplayName("발송 성공 시 SUCCESS SendLog 1건 저장된다")
+    void savesSendLog_whenNotificationSentSuccessfully() {
+        // arrange
+        Notification saved = saveNotification(NotificationStatus.PENDING);
+
+        // act
+        notificationFacade.sendNotification(saved.getId());
+
+        // assert
+        List<NotificationSendLog> logs = notificationSendLogJpaRepository.findAll();
+        assertAll(
+                () -> assertThat(logs).hasSize(1),
+                () -> assertThat(logs.get(0).getNotificationId()).isEqualTo(saved.getId()),
+                () -> assertThat(logs.get(0).getResult()).isEqualTo(SendLogResult.SUCCESS)
+        );
+    }
+
+    @Test
+    @DisplayName("발송 실패 시 FAILURE SendLog 1건 저장된다")
+    void savesSendLog_whenNotificationSendFails() {
+        // arrange
+        Notification saved = saveNotification(NotificationStatus.PENDING);
+        doThrow(new RuntimeException("SMTP error")).when(emailNotificationSender).send(any());
+
+        // act
+        notificationFacade.sendNotification(saved.getId());
+
+        // assert
+        List<NotificationSendLog> logs = notificationSendLogJpaRepository.findAll();
+        assertAll(
+                () -> assertThat(logs).hasSize(1),
+                () -> assertThat(logs.get(0).getNotificationId()).isEqualTo(saved.getId()),
+                () -> assertThat(logs.get(0).getResult()).isEqualTo(SendLogResult.FAILURE),
+                () -> assertThat(logs.get(0).getFailureReason()).contains("SMTP error")
+        );
+    }
+
+    @Test
+    @DisplayName("처리 불가 상태(SENT)에서는 SendLog가 저장되지 않는다")
+    void doesNotSaveSendLog_whenNotificationAlreadySent() {
+        // arrange
+        Notification notification = saveNotification(NotificationStatus.SENT);
+
+        // act
+        notificationFacade.sendNotification(notification.getId());
+
+        // assert
+        List<NotificationSendLog> logs = notificationSendLogJpaRepository.findAll();
+        assertThat(logs).isEmpty();
     }
 
     private Notification saveNotification(NotificationStatus status) {
