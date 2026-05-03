@@ -82,7 +82,7 @@ class NotificationSendServiceIntegrationTest {
             Notification saved = savePendingNotification(NotificationChannel.EMAIL);
 
             // act
-            notificationService.process(saved.getId());
+            notificationService.sendNotification(saved.getId());
 
             // assert
             Notification result = notificationJpaRepository.findById(saved.getId()).orElseThrow();
@@ -99,7 +99,7 @@ class NotificationSendServiceIntegrationTest {
             Notification saved = savePendingNotification(NotificationChannel.IN_APP);
 
             // act
-            notificationService.process(saved.getId());
+            notificationService.sendNotification(saved.getId());
 
             // assert
             Notification result = notificationJpaRepository.findById(saved.getId()).orElseThrow();
@@ -114,7 +114,7 @@ class NotificationSendServiceIntegrationTest {
             doThrow(new RuntimeException("SMTP error")).when(emailNotificationSender).send(any());
 
             // act
-            notificationService.process(saved.getId());
+            notificationService.sendNotification(saved.getId());
 
             // assert
             Notification result = notificationJpaRepository.findById(saved.getId()).orElseThrow();
@@ -133,14 +133,14 @@ class NotificationSendServiceIntegrationTest {
             doThrow(new RuntimeException("SMTP error")).when(emailNotificationSender).send(any());
 
             // act
-            notificationService.process(saved.getId());
+            notificationService.sendNotification(saved.getId());
 
             // assert
             Notification result = notificationJpaRepository.findById(saved.getId()).orElseThrow();
             assertThat(result.getStatus()).isEqualTo(NotificationStatus.DEAD_LETTER);
         }
 
-        @DisplayName("이미 SENT 상태인 알림에 process()를 호출해도 상태가 변경되지 않는다.")
+        @DisplayName("이미 SENT 상태인 알림에 sendNotification()을 호출해도 상태가 변경되지 않는다.")
         @Test
         void doesNotChangeStatus_whenAlreadySent() {
             // arrange
@@ -159,14 +159,14 @@ class NotificationSendServiceIntegrationTest {
             Notification saved = notificationJpaRepository.save(notification);
 
             // act
-            notificationService.process(saved.getId());
+            notificationService.sendNotification(saved.getId());
 
             // assert
             Notification result = notificationJpaRepository.findById(saved.getId()).orElseThrow();
             assertThat(result.getStatus()).isEqualTo(NotificationStatus.SENT);
         }
 
-        @DisplayName("이미 PROCESSING 상태인 알림에 process()를 호출해도 상태가 변경되지 않는다.")
+        @DisplayName("이미 PROCESSING 상태인 알림에 sendNotification()을 호출해도 상태가 변경되지 않는다.")
         @Test
         void doesNotChangeStatus_whenAlreadyProcessing() {
             // arrange
@@ -185,7 +185,7 @@ class NotificationSendServiceIntegrationTest {
             Notification saved = notificationJpaRepository.save(notification);
 
             // act
-            notificationService.process(saved.getId());
+            notificationService.sendNotification(saved.getId());
 
             // assert
             Notification result = notificationJpaRepository.findById(saved.getId()).orElseThrow();
@@ -200,7 +200,7 @@ class NotificationSendServiceIntegrationTest {
 
             // act & assert
             BusinessException exception = assertThrows(BusinessException.class, () ->
-                    notificationService.process(nonExistentId)
+                    notificationService.sendNotification(nonExistentId)
             );
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
         }

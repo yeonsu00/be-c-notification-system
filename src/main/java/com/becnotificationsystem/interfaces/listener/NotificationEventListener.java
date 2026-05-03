@@ -1,7 +1,7 @@
 package com.becnotificationsystem.interfaces.listener;
 
-import com.becnotificationsystem.application.notification.NotificationService;
 import com.becnotificationsystem.application.notification.NotificationCreatedEvent;
+import com.becnotificationsystem.application.notification.NotificationFacade;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -12,11 +12,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class NotificationEventListener {
 
-    private final NotificationService notificationService;
+    private final NotificationFacade notificationFacade;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleNotificationCreated(NotificationCreatedEvent event) {
-        notificationService.process(event.notificationId());
+        notificationFacade.sendNotification(event.notificationId());
     }
 }

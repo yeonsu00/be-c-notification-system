@@ -1,7 +1,7 @@
 package com.becnotificationsystem.interfaces.scheduler;
 
 import com.becnotificationsystem.application.notification.NotificationRepository;
-import com.becnotificationsystem.application.notification.NotificationService;
+import com.becnotificationsystem.application.notification.NotificationFacade;
 import com.becnotificationsystem.application.notification.NotificationCreatedEvent;
 import com.becnotificationsystem.domain.notification.NotificationStatus;
 import java.time.LocalDateTime;
@@ -17,7 +17,7 @@ public class NotificationRecoveryScheduler {
 
     private final NotificationRepository notificationRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final NotificationService notificationService;
+    private final NotificationFacade notificationFacade;
 
     @Scheduled(fixedDelay = 60_000)
     public void recoverPendingNotifications() {
@@ -44,6 +44,6 @@ public class NotificationRecoveryScheduler {
     public void retryFailedNotifications() {
         notificationRepository
                 .findByStatusAndDeletedFalse(NotificationStatus.FAILED)
-                .forEach(n -> notificationService.process(n.getId()));
+                .forEach(n -> notificationFacade.sendNotification(n.getId()));
     }
 }
