@@ -27,4 +27,6 @@ public interface NotificationRepository {
 
     List<Notification> findByStatusAndCreatedAtBeforeAndDeletedFalse(NotificationStatus status, LocalDateTime before);
 
+    List<Notification> findDueScheduledNotifications(LocalDateTime now);
+
 }

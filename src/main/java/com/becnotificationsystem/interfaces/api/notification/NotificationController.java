@@ -1,11 +1,13 @@
 package com.becnotificationsystem.interfaces.api.notification;
 
+import com.becnotificationsystem.application.notification.NotificationFacade;
 import com.becnotificationsystem.application.notification.NotificationInfo;
 import com.becnotificationsystem.application.notification.NotificationInfo.ListItem;
 import com.becnotificationsystem.application.notification.NotificationService;
 import com.becnotificationsystem.global.common.response.CommonApiResponse;
 import com.becnotificationsystem.global.common.response.PageResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -18,13 +20,14 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class NotificationController {
 
+    private final NotificationFacade notificationFacade;
     private final NotificationService notificationService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public CommonApiResponse<NotificationInfo.Detail> register(
             @Valid @RequestBody NotificationCreateRequest request) {
-        return CommonApiResponse.success(notificationService.register(request), "알림 발송 요청이 접수되었습니다.");
+        return CommonApiResponse.success(notificationFacade.register(request), "알림 발송 요청이 접수되었습니다.");
     }
 
     @GetMapping("/{notificationId}")
@@ -39,5 +42,20 @@ public class NotificationController {
             @RequestParam(required = false) Boolean readFilter,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return CommonApiResponse.success(notificationService.findByReceiverId(userId, readFilter, pageable), "조회 성공");
+    }
+
+    @PatchMapping("/{notificationId}/read")
+    public CommonApiResponse<NotificationInfo.ReadResult> markAsRead(
+            @PathVariable Long notificationId,
+            @RequestHeader("X-User-Id") Long userId) {
+        LocalDateTime readAt = LocalDateTime.now();
+        return CommonApiResponse.success(notificationService.markAsRead(notificationId, userId, readAt), "읽음 처리 성공");
+    }
+
+    @PostMapping("/{notificationId}/retry")
+    public CommonApiResponse<NotificationInfo.Detail> manualRetry(
+            @PathVariable Long notificationId,
+            @RequestHeader("X-User-Id") Long userId) {
+        return CommonApiResponse.success(notificationService.manualRetry(notificationId, userId), "재시도 요청 성공");
     }
 }

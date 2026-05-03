@@ -46,9 +46,7 @@ public class NotificationService {
                 request.scheduledAt()
         );
 
-        NotificationInfo.Detail result = NotificationInfo.Detail.from(notificationRepository.save(notification));
-        eventPublisher.publishEvent(NotificationCreatedEvent.of(result.notificationId()));
-        return result;
+        return NotificationInfo.Detail.from(notificationRepository.save(notification));
     }
 
     @Transactional(readOnly = true)
@@ -150,4 +148,66 @@ public class NotificationService {
                 .stream().map(Notification::getId).toList();
     }
 
+    @Transactional
+    public void scheduledToPending(Long notificationId) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        if (!NotificationStatus.isScheduled(notification.getStatus())) {
+            log.debug("예약 알림이 SCHEDULED 상태가 아닙니다. notificationId={}, status={}", notificationId, notification.getStatus());
+            return;
+        }
+        notification.markAsPending();
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(NotificationCreatedEvent.of(notificationId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationInfo.Detail> findAllScheduled() {
+        return notificationRepository.findByStatusAndDeletedFalse(NotificationStatus.SCHEDULED)
+                .stream().map(NotificationInfo.Detail::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findDueScheduledIds() {
+        return notificationRepository.findDueScheduledNotifications(LocalDateTime.now())
+                .stream().map(Notification::getId).toList();
+    }
+
+    @Transactional
+    public NotificationInfo.ReadResult markAsRead(Long notificationId, Long receiverId, LocalDateTime readAt) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        if (NotificationChannel.isEmail(notification.getChannel())) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_NOT_SUPPORTED);
+        }
+        if (!notification.matchesReceiver(receiverId)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+        }
+
+        int updated = notificationRepository.compareAndSwap(notificationId, NotificationStatus.SENT, NotificationStatus.READ);
+        if (updated > 0) {
+            notification.markAsRead(readAt);
+        }
+
+        return NotificationInfo.ReadResult.from(notification);
+    }
+
+    @Transactional
+    public NotificationInfo.Detail manualRetry(Long notificationId, Long receiverId) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        if (!NotificationStatus.isDeadLetter(notification.getStatus())) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_RETRY_NOT_ALLOWED);
+        }
+        if (!notification.matchesReceiver(receiverId)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+        }
+
+        notification.resetToPending();
+        NotificationInfo.Detail result = NotificationInfo.Detail.from(notificationRepository.save(notification));
+        eventPublisher.publishEvent(NotificationCreatedEvent.of(notificationId));
+        return result;
+    }
 }

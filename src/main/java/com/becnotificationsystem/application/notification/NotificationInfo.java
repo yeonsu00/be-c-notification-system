@@ -70,4 +70,10 @@ public class NotificationInfo {
             );
         }
     }
+
+    public record ReadResult(Long notificationId, NotificationStatus status, LocalDateTime readAt) {
+        public static ReadResult from(Notification notification) {
+            return new ReadResult(notification.getId(), notification.getStatus(), notification.getReadAt());
+        }
+    }
 }

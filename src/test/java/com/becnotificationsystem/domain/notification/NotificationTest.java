@@ -57,6 +57,44 @@ class NotificationTest {
             assertThat(notification.getScheduledAt()).isNull();
             assertThat(notification.getStatus()).isEqualTo(NotificationStatus.PENDING);
         }
+
+        @DisplayName("scheduledAt이 현재 시각보다 미래이면 SCHEDULED 상태로 생성된다.")
+        @Test
+        void createsScheduledNotification_whenScheduledAtIsInFuture() {
+            // arrange
+            LocalDateTime future = LocalDateTime.now().plusDays(1);
+
+            // act
+            Notification notification = Notification.of(
+                    1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    100L, "ORDER", "scheduled-key", future
+            );
+
+            // assert
+            assertAll(
+                    () -> assertThat(notification.getStatus()).isEqualTo(NotificationStatus.SCHEDULED),
+                    () -> assertThat(notification.getScheduledAt()).isEqualTo(future)
+            );
+        }
+
+        @DisplayName("scheduledAt이 현재 시각 이전이면 PENDING 상태로 생성된다.")
+        @Test
+        void createsPendingNotification_whenScheduledAtIsInPast() {
+            // arrange
+            LocalDateTime past = LocalDateTime.now().minusMinutes(1);
+
+            // act
+            Notification notification = Notification.of(
+                    1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    100L, "ORDER", "past-schedule-key", past
+            );
+
+            // assert
+            assertAll(
+                    () -> assertThat(notification.getStatus()).isEqualTo(NotificationStatus.PENDING),
+                    () -> assertThat(notification.getScheduledAt()).isEqualTo(past)
+            );
+        }
     }
 
     @DisplayName("멱등성 키를 생성할 때,")
@@ -279,6 +317,147 @@ class NotificationTest {
 
             // assert
             assertThat(notification.getStatus()).isEqualTo(NotificationStatus.PENDING);
+        }
+
+        @DisplayName("markAsPending()을 호출하면 SCHEDULED에서 PENDING으로 전이된다.")
+        @Test
+        void transitionsToPending_whenMarkAsPendingCalledFromScheduled() {
+            // arrange
+            LocalDateTime future = LocalDateTime.now().plusHours(1);
+            Notification notification = Notification.of(
+                    1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    100L, "ORDER", "sched-to-pending", future
+            );
+
+            // act
+            notification.markAsPending();
+
+            // assert
+            assertThat(notification.getStatus()).isEqualTo(NotificationStatus.PENDING);
+        }
+
+        @DisplayName("markAsRead()을 호출하면 READ 상태가 되고 readAt이 설정된다.")
+        @Test
+        void transitionsToRead_whenMarkAsReadCalled() {
+            // arrange
+            Notification notification = createPendingNotification();
+            notification.startProcessing();
+            notification.markAsSent();
+            LocalDateTime readAt = LocalDateTime.now().plusSeconds(1);
+
+            // act
+            notification.markAsRead(readAt);
+
+            // assert
+            assertAll(
+                    () -> assertThat(notification.getStatus()).isEqualTo(NotificationStatus.READ),
+                    () -> assertThat(notification.getReadAt()).isEqualTo(readAt)
+            );
+        }
+    }
+
+    @DisplayName("matchesReceiver()를 호출할 때,")
+    @Nested
+    class MatchesReceiver {
+
+        @DisplayName("동일한 receiverId이면 true를 반환한다.")
+        @Test
+        void returnsTrue_whenReceiverIdMatches() {
+            // arrange
+            Notification notification = Notification.of(
+                    42L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    1L, "ORDER", "match-key", null
+            );
+
+            // act & assert
+            assertThat(notification.matchesReceiver(42L)).isTrue();
+        }
+
+        @DisplayName("다른 receiverId이면 false를 반환한다.")
+        @Test
+        void returnsFalse_whenReceiverIdDiffers() {
+            // arrange
+            Notification notification = Notification.of(
+                    42L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    1L, "ORDER", "mismatch-key", null
+            );
+
+            // act & assert
+            assertThat(notification.matchesReceiver(99L)).isFalse();
+        }
+
+        @DisplayName("null을 넘기면 false를 반환한다.")
+        @Test
+        void returnsFalse_whenReceiverIdIsNull() {
+            // arrange
+            Notification notification = Notification.of(
+                    42L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    1L, "ORDER", "null-receiver-key", null
+            );
+
+            // act & assert
+            assertThat(notification.matchesReceiver(null)).isFalse();
+        }
+    }
+
+    @DisplayName("isProcessable()을 호출할 때,")
+    @Nested
+    class IsProcessable {
+
+        @DisplayName("PENDING이면 true를 반환한다.")
+        @Test
+        void returnsTrue_whenPending() {
+            Notification n = Notification.of(
+                    1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.EMAIL,
+                    1L, "ORDER", "proc-pending", null
+            );
+            assertThat(n.isProcessable()).isTrue();
+        }
+
+        @DisplayName("FAILED이면 true를 반환한다.")
+        @Test
+        void returnsTrue_whenFailed() {
+            Notification n = Notification.builder()
+                    .receiverId(1L)
+                    .notificationType(NotificationType.ENROLLMENT_COMPLETE)
+                    .channel(NotificationChannel.EMAIL)
+                    .status(NotificationStatus.FAILED)
+                    .referenceId(1L)
+                    .referenceType("ORDER")
+                    .idempotencyKey("proc-failed")
+                    .retryCount(1)
+                    .maxRetryCount(3)
+                    .deleted(false)
+                    .build();
+            assertThat(n.isProcessable()).isTrue();
+        }
+
+        @DisplayName("SCHEDULED이면 false를 반환한다.")
+        @Test
+        void returnsFalse_whenScheduled() {
+            Notification n = Notification.of(
+                    1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    1L, "ORDER", "proc-scheduled", LocalDateTime.now().plusHours(1)
+            );
+            assertThat(n.isProcessable()).isFalse();
+        }
+
+        @DisplayName("SENT이면 false를 반환한다.")
+        @Test
+        void returnsFalse_whenSent() {
+            Notification n = Notification.builder()
+                    .receiverId(1L)
+                    .notificationType(NotificationType.ENROLLMENT_COMPLETE)
+                    .channel(NotificationChannel.IN_APP)
+                    .status(NotificationStatus.SENT)
+                    .referenceId(1L)
+                    .referenceType("ORDER")
+                    .idempotencyKey("proc-sent")
+                    .retryCount(0)
+                    .maxRetryCount(3)
+                    .deleted(false)
+                    .build();
+            assertThat(n.isProcessable()).isFalse();
         }
     }
 }

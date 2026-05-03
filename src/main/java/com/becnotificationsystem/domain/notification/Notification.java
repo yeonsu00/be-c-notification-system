@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -83,13 +84,17 @@ public class Notification extends BaseEntity {
     }
 
     public static Notification of(Long receiverId, NotificationType notificationType, NotificationChannel channel,
-                                   Long referenceId, String referenceType, String idempotencyKey,
-                                   LocalDateTime scheduledAt) {
+                                  Long referenceId, String referenceType, String idempotencyKey,
+                                  LocalDateTime scheduledAt) {
+        NotificationStatus initialStatus = (scheduledAt != null && scheduledAt.isAfter(LocalDateTime.now()))
+                ? NotificationStatus.SCHEDULED
+                : NotificationStatus.PENDING;
+
         return Notification.builder()
                 .receiverId(receiverId)
                 .notificationType(notificationType)
                 .channel(channel)
-                .status(NotificationStatus.PENDING)
+                .status(initialStatus)
                 .referenceId(referenceId)
                 .referenceType(referenceType)
                 .idempotencyKey(idempotencyKey)
@@ -98,6 +103,10 @@ public class Notification extends BaseEntity {
                 .scheduledAt(scheduledAt)
                 .deleted(false)
                 .build();
+    }
+
+    public void markAsPending() {
+        this.status = NotificationStatus.PENDING;
     }
 
     public boolean isProcessable() {
@@ -129,6 +138,15 @@ public class Notification extends BaseEntity {
 
     public void resetToPending() {
         this.status = NotificationStatus.PENDING;
+    }
+
+    public void markAsRead(LocalDateTime readAt) {
+        this.status = NotificationStatus.READ;
+        this.readAt = readAt;
+    }
+
+    public boolean matchesReceiver(Long receiverId) {
+        return Objects.equals(this.receiverId, receiverId);
     }
 
     public static String generateIdempotencyKey(Long receiverId, NotificationType notificationType,

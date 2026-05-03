@@ -2,8 +2,8 @@ package com.becnotificationsystem.interfaces.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.becnotificationsystem.application.notification.NotificationFacade;
 import com.becnotificationsystem.application.notification.NotificationInfo;
-import com.becnotificationsystem.application.notification.NotificationService;
 import com.becnotificationsystem.domain.notification.NotificationChannel;
 import com.becnotificationsystem.domain.notification.NotificationStatus;
 import com.becnotificationsystem.domain.notification.NotificationType;
@@ -22,7 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 class NotificationEventListenerIntegrationTest {
 
     @Autowired
-    private NotificationService notificationService;
+    private NotificationFacade notificationFacade;
 
     @Autowired
     private NotificationJpaRepository notificationJpaRepository;
@@ -46,7 +46,7 @@ class NotificationEventListenerIntegrationTest {
             );
 
             // act
-            NotificationInfo.Detail result = notificationService.register(request);
+            NotificationInfo.Detail result = notificationFacade.register(request);
 
             // assert — 비동기 발송 처리 완료 대기 (최대 3초, 100ms 간격 폴링)
             NotificationStatus status = NotificationStatus.PENDING;

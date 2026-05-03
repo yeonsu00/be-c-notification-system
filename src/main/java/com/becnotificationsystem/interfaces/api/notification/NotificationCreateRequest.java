@@ -2,6 +2,7 @@ package com.becnotificationsystem.interfaces.api.notification;
 
 import com.becnotificationsystem.domain.notification.NotificationChannel;
 import com.becnotificationsystem.domain.notification.NotificationType;
+import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -23,5 +24,6 @@ public record NotificationCreateRequest(
         @NotBlank(message = "참조 타입은 필수입니다.")
         String referenceType,
 
+        @Future(message = "예약 발송 시각은 현재 시각 이후여야 합니다.")
         LocalDateTime scheduledAt
 ) {}
