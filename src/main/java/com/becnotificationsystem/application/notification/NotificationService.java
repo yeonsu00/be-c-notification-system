@@ -6,6 +6,7 @@ import com.becnotificationsystem.global.common.response.PageResponse;
 import com.becnotificationsystem.global.exception.BusinessException;
 import com.becnotificationsystem.global.exception.ErrorCode;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -115,6 +116,39 @@ public class NotificationService {
 
         notificationRepository.save(notification);
         return Optional.of(result);
+    }
+
+    @Transactional
+    public void recoverPendingNotifications(LocalDateTime threshold) {
+        notificationRepository
+                .findByStatusAndCreatedAtBeforeAndDeletedFalse(NotificationStatus.PENDING, threshold)
+                .forEach(n -> eventPublisher.publishEvent(NotificationCreatedEvent.of(n.getId())));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findStuckProcessingIdsBefore(LocalDateTime threshold) {
+        return notificationRepository
+                .findByStatusAndUpdatedAtBeforeAndDeletedFalse(NotificationStatus.PROCESSING, threshold)
+                .stream().map(Notification::getId).toList();
+    }
+
+    @Transactional
+    public void recoverStuckNotification(Long notificationId, boolean hasSuccessLog) {
+        Notification n = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        if (hasSuccessLog) {
+            n.markAsSent();
+        } else {
+            n.resetToPending();
+            eventPublisher.publishEvent(NotificationCreatedEvent.of(notificationId));
+        }
+        notificationRepository.save(n);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findFailedIds() {
+        return notificationRepository.findByStatusAndDeletedFalse(NotificationStatus.FAILED)
+                .stream().map(Notification::getId).toList();
     }
 
 }
