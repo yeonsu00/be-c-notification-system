@@ -51,4 +51,11 @@ public class NotificationController {
         LocalDateTime readAt = LocalDateTime.now();
         return CommonApiResponse.success(notificationService.markAsRead(notificationId, userId, readAt), "읽음 처리 성공");
     }
+
+    @PostMapping("/{notificationId}/retry")
+    public CommonApiResponse<NotificationInfo.Detail> manualRetry(
+            @PathVariable Long notificationId,
+            @RequestHeader("X-User-Id") Long userId) {
+        return CommonApiResponse.success(notificationService.manualRetry(notificationId, userId), "재시도 요청 성공");
+    }
 }

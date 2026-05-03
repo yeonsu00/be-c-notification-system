@@ -16,4 +16,8 @@ public enum NotificationStatus {
     public static boolean isScheduled(NotificationStatus status) {
         return status == NotificationStatus.SCHEDULED;
     }
+
+    public static boolean isDeadLetter(NotificationStatus status) {
+        return status == NotificationStatus.DEAD_LETTER;
+    }
 }

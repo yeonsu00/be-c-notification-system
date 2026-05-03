@@ -192,4 +192,22 @@ public class NotificationService {
 
         return NotificationInfo.ReadResult.from(notification);
     }
+
+    @Transactional
+    public NotificationInfo.Detail manualRetry(Long notificationId, Long receiverId) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        if (!NotificationStatus.isDeadLetter(notification.getStatus())) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_RETRY_NOT_ALLOWED);
+        }
+        if (!notification.matchesReceiver(receiverId)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+        }
+
+        notification.resetToPending();
+        NotificationInfo.Detail result = NotificationInfo.Detail.from(notificationRepository.save(notification));
+        eventPublisher.publishEvent(NotificationCreatedEvent.of(notificationId));
+        return result;
+    }
 }
