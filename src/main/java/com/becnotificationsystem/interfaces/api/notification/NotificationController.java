@@ -1,5 +1,6 @@
 package com.becnotificationsystem.interfaces.api.notification;
 
+import com.becnotificationsystem.application.notification.NotificationFacade;
 import com.becnotificationsystem.application.notification.NotificationInfo;
 import com.becnotificationsystem.application.notification.NotificationInfo.ListItem;
 import com.becnotificationsystem.application.notification.NotificationService;
@@ -18,13 +19,14 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class NotificationController {
 
+    private final NotificationFacade notificationFacade;
     private final NotificationService notificationService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public CommonApiResponse<NotificationInfo.Detail> register(
             @Valid @RequestBody NotificationCreateRequest request) {
-        return CommonApiResponse.success(notificationService.register(request), "알림 발송 요청이 접수되었습니다.");
+        return CommonApiResponse.success(notificationFacade.register(request), "알림 발송 요청이 접수되었습니다.");
     }
 
     @GetMapping("/{notificationId}")

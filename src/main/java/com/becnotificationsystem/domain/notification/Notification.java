@@ -85,11 +85,15 @@ public class Notification extends BaseEntity {
     public static Notification of(Long receiverId, NotificationType notificationType, NotificationChannel channel,
                                    Long referenceId, String referenceType, String idempotencyKey,
                                    LocalDateTime scheduledAt) {
+        NotificationStatus initialStatus = (scheduledAt != null && scheduledAt.isAfter(LocalDateTime.now()))
+                ? NotificationStatus.SCHEDULED
+                : NotificationStatus.PENDING;
+
         return Notification.builder()
                 .receiverId(receiverId)
                 .notificationType(notificationType)
                 .channel(channel)
-                .status(NotificationStatus.PENDING)
+                .status(initialStatus)
                 .referenceId(referenceId)
                 .referenceType(referenceType)
                 .idempotencyKey(idempotencyKey)
@@ -98,6 +102,10 @@ public class Notification extends BaseEntity {
                 .scheduledAt(scheduledAt)
                 .deleted(false)
                 .build();
+    }
+
+    public void markAsPending() {
+        this.status = NotificationStatus.PENDING;
     }
 
     public boolean isProcessable() {

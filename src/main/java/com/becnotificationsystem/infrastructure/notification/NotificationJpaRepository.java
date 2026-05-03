@@ -33,4 +33,7 @@ public interface NotificationJpaRepository extends JpaRepository<Notification, L
 
     List<Notification> findByStatusAndCreatedAtBeforeAndDeletedFalse(NotificationStatus status, LocalDateTime before);
 
+    List<Notification> findByStatusAndScheduledAtLessThanEqualAndDeletedFalse(
+            NotificationStatus status, LocalDateTime scheduledAt);
+
 }

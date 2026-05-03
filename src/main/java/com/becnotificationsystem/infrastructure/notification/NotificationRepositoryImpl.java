@@ -64,4 +64,10 @@ public class NotificationRepositoryImpl implements NotificationRepository {
     public List<Notification> findByStatusAndCreatedAtBeforeAndDeletedFalse(NotificationStatus status, LocalDateTime before) {
         return notificationJpaRepository.findByStatusAndCreatedAtBeforeAndDeletedFalse(status, before);
     }
+
+    @Override
+    public List<Notification> findDueScheduledNotifications(LocalDateTime now) {
+        return notificationJpaRepository.findByStatusAndScheduledAtLessThanEqualAndDeletedFalse(
+                NotificationStatus.SCHEDULED, now);
+    }
 }
