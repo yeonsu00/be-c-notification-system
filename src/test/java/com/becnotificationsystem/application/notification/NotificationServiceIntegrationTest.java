@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -20,6 +21,7 @@ import com.becnotificationsystem.infrastructure.notification.InAppNotificationSe
 import com.becnotificationsystem.infrastructure.notification.NotificationJpaRepository;
 import com.becnotificationsystem.interfaces.api.notification.NotificationCreateRequest;
 import com.becnotificationsystem.interfaces.listener.NotificationEventListener;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -455,6 +457,269 @@ class NotificationServiceIntegrationTest {
                     notificationService.sendNotification(nonExistentId)
             );
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+        }
+    }
+
+    @DisplayName("예약 등록 및 예약 처리(scheduledToPending)를 할 때,")
+    @Nested
+    class ScheduledRegistration {
+
+        @DisplayName("scheduledAt이 미래이면 SCHEDULED 상태로 저장된다.")
+        @Test
+        void savesScheduledNotification_whenScheduledAtIsFuture() {
+            LocalDateTime future = LocalDateTime.now().plusHours(2);
+            NotificationCreateRequest request = new NotificationCreateRequest(
+                    1L,
+                    NotificationType.ENROLLMENT_COMPLETE,
+                    NotificationChannel.IN_APP,
+                    500L,
+                    "SCHEDULED_ORDER",
+                    future
+            );
+
+            NotificationInfo.Detail result = notificationService.register(request);
+
+            assertThat(result.status()).isEqualTo(NotificationStatus.SCHEDULED);
+            assertThat(result.scheduledAt()).isEqualTo(future);
+
+            Notification persisted = notificationJpaRepository.findById(result.notificationId()).orElseThrow();
+            assertThat(persisted.getStatus()).isEqualTo(NotificationStatus.SCHEDULED);
+        }
+
+        @DisplayName("scheduledToPending()은 SCHEDULED 알림을 PENDING으로 바꾸고 이벤트를 발행한다.")
+        @Test
+        void publishesEvent_whenScheduledNotificationBecomesPending() {
+            LocalDateTime future = LocalDateTime.now().plusHours(1);
+            NotificationCreateRequest request = new NotificationCreateRequest(
+                    1L,
+                    NotificationType.PAYMENT_CONFIRMED,
+                    NotificationChannel.IN_APP,
+                    600L,
+                    "SCHEDULED_PAYMENT",
+                    future
+            );
+            NotificationInfo.Detail saved = notificationService.register(request);
+
+            notificationService.scheduledToPending(saved.notificationId());
+
+            Notification persisted = notificationJpaRepository.findById(saved.notificationId()).orElseThrow();
+            assertThat(persisted.getStatus()).isEqualTo(NotificationStatus.PENDING);
+            verify(notificationEventListener, times(1)).handleNotificationCreated(any());
+        }
+
+        @DisplayName("scheduledToPending()은 SCHEDULED가 아닌 알림에 대해 상태를 바꾸지 않고 이벤트도 발행하지 않는다.")
+        @Test
+        void doesNothing_whenNotificationIsNotScheduled() {
+            Notification pending = savePendingNotification(NotificationChannel.IN_APP);
+
+            notificationService.scheduledToPending(pending.getId());
+
+            Notification persisted = notificationJpaRepository.findById(pending.getId()).orElseThrow();
+            assertThat(persisted.getStatus()).isEqualTo(NotificationStatus.PENDING);
+            verify(notificationEventListener, never()).handleNotificationCreated(any());
+        }
+
+        @DisplayName("findAllScheduled()은 SCHEDULED 상태 알림만 반환한다.")
+        @Test
+        void returnsOnlyScheduledNotifications() {
+            notificationService.register(new NotificationCreateRequest(
+                    1L, NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
+                    700L, "MULTI_SCHED", LocalDateTime.now().plusDays(1)));
+            savePendingNotification(NotificationChannel.IN_APP);
+
+            var scheduled = notificationService.findAllScheduled();
+
+            assertThat(scheduled).hasSize(1);
+            assertThat(scheduled.get(0).status()).isEqualTo(NotificationStatus.SCHEDULED);
+        }
+
+        @DisplayName("findDueScheduledIds()는 scheduledAt이 기준 시각 이하인 SCHEDULED 알림 ID만 반환한다.")
+        @Test
+        void returnsDueScheduledIds_onlyWhenScheduledAtHasPassed() {
+            Notification due = Notification.builder()
+                    .receiverId(1L)
+                    .notificationType(NotificationType.ENROLLMENT_COMPLETE)
+                    .channel(NotificationChannel.IN_APP)
+                    .status(NotificationStatus.SCHEDULED)
+                    .referenceId(800L)
+                    .referenceType("DUE")
+                    .idempotencyKey("due-scheduled-1")
+                    .retryCount(0)
+                    .maxRetryCount(3)
+                    .scheduledAt(LocalDateTime.now().minusMinutes(5))
+                    .deleted(false)
+                    .build();
+            notificationJpaRepository.save(due);
+            Notification future = Notification.builder()
+                    .receiverId(1L)
+                    .notificationType(NotificationType.PAYMENT_CONFIRMED)
+                    .channel(NotificationChannel.IN_APP)
+                    .status(NotificationStatus.SCHEDULED)
+                    .referenceId(801L)
+                    .referenceType("FUTURE")
+                    .idempotencyKey("future-scheduled-1")
+                    .retryCount(0)
+                    .maxRetryCount(3)
+                    .scheduledAt(LocalDateTime.now().plusDays(1))
+                    .deleted(false)
+                    .build();
+            notificationJpaRepository.save(future);
+
+            var ids = notificationService.findDueScheduledIds();
+
+            assertThat(ids).containsExactly(due.getId());
+        }
+    }
+
+    @DisplayName("읽음 처리(markAsRead)를 할 때,")
+    @Nested
+    class MarkAsRead {
+
+        private Notification saveInAppSent(Long receiverId) {
+            long suffix = System.nanoTime();
+            Notification n = Notification.of(
+                    receiverId,
+                    NotificationType.ENROLLMENT_COMPLETE,
+                    NotificationChannel.IN_APP,
+                    900L + (suffix % 10_000),
+                    "READ_TEST",
+                    "read-test-" + receiverId + "-" + suffix,
+                    null
+            );
+            Notification saved = notificationJpaRepository.save(n);
+            notificationService.sendNotification(saved.getId());
+            return notificationJpaRepository.findById(saved.getId()).orElseThrow();
+        }
+
+        @DisplayName("IN_APP + SENT이고 수신자 본인이면 READ로 전이되고 readAt이 반환된다.")
+        @Test
+        void marksAsRead_whenInAppSentAndReceiverMatches() {
+            Notification saved = saveInAppSent(1L);
+            LocalDateTime readAt = LocalDateTime.now();
+
+            NotificationInfo.ReadResult result = notificationService.markAsRead(saved.getId(), 1L, readAt);
+
+            assertThat(result.status()).isEqualTo(NotificationStatus.READ);
+            assertThat(result.readAt()).isNotNull();
+
+            Notification persisted = notificationJpaRepository.findById(saved.getId()).orElseThrow();
+            assertThat(persisted.getStatus()).isEqualTo(NotificationStatus.READ);
+            assertThat(persisted.getReadAt()).isNotNull();
+        }
+
+        @DisplayName("이미 READ인 알림에 대해 멱등적으로 호출하면 READ 상태와 readAt을 그대로 반환한다.")
+        @Test
+        void isIdempotent_whenAlreadyRead() {
+            Notification saved = saveInAppSent(1L);
+            LocalDateTime firstReadAt = LocalDateTime.now().minusMinutes(10);
+            notificationService.markAsRead(saved.getId(), 1L, firstReadAt);
+
+            NotificationInfo.ReadResult second = notificationService.markAsRead(saved.getId(), 1L, LocalDateTime.now());
+
+            assertThat(second.status()).isEqualTo(NotificationStatus.READ);
+            Notification persisted = notificationJpaRepository.findById(saved.getId()).orElseThrow();
+            assertThat(persisted.getReadAt()).isEqualTo(firstReadAt);
+        }
+
+        @DisplayName("EMAIL 채널이면 NOTIFICATION_CHANNEL_NOT_SUPPORTED 예외가 발생한다.")
+        @Test
+        void throwsException_whenChannelIsEmail() {
+            long suffix = System.nanoTime();
+            Notification pending = Notification.of(
+                    1L,
+                    NotificationType.ENROLLMENT_COMPLETE,
+                    NotificationChannel.EMAIL,
+                    901L + (suffix % 10_000),
+                    "EMAIL_READ",
+                    "email-read-" + suffix,
+                    null
+            );
+            Notification saved = notificationJpaRepository.save(pending);
+            notificationService.sendNotification(saved.getId());
+
+            BusinessException ex = assertThrows(BusinessException.class, () ->
+                    notificationService.markAsRead(saved.getId(), 1L, LocalDateTime.now()));
+
+            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.NOTIFICATION_CHANNEL_NOT_SUPPORTED);
+        }
+
+        @DisplayName("수신자가 아니면 NOTIFICATION_ACCESS_DENIED 예외가 발생한다.")
+        @Test
+        void throwsException_whenReceiverDoesNotMatch() {
+            Notification saved = saveInAppSent(1L);
+
+            BusinessException ex = assertThrows(BusinessException.class, () ->
+                    notificationService.markAsRead(saved.getId(), 2L, LocalDateTime.now()));
+
+            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+        }
+
+        @DisplayName("SENT가 아닌 알림은 compareAndSwap이 적용되지 않아 상태가 그대로이고 예외 없이 결과를 반환한다.")
+        @Test
+        void returnsCurrentState_whenNotSent() {
+            Notification pending = savePendingNotification(NotificationChannel.IN_APP);
+
+            NotificationInfo.ReadResult result = notificationService.markAsRead(pending.getId(), 1L, LocalDateTime.now());
+
+            assertThat(result.status()).isEqualTo(NotificationStatus.PENDING);
+            assertThat(result.readAt()).isNull();
+        }
+    }
+
+    @DisplayName("수동 재시도(manualRetry)를 할 때,")
+    @Nested
+    class ManualRetry {
+
+        private Notification saveDeadLetter(Long receiverId) {
+            long suffix = System.nanoTime();
+            Notification n = Notification.builder()
+                    .receiverId(receiverId)
+                    .notificationType(NotificationType.ENROLLMENT_COMPLETE)
+                    .channel(NotificationChannel.EMAIL)
+                    .status(NotificationStatus.DEAD_LETTER)
+                    .referenceId(1000L + (suffix % 10_000))
+                    .referenceType("DL")
+                    .idempotencyKey("dl-" + receiverId + "-" + suffix)
+                    .retryCount(3)
+                    .maxRetryCount(3)
+                    .deleted(false)
+                    .build();
+            return notificationJpaRepository.save(n);
+        }
+
+        @DisplayName("DEAD_LETTER이고 수신자 본인이면 PENDING으로 복구하고 이벤트를 발행한다.")
+        @Test
+        void resetsToPending_whenDeadLetterAndReceiverMatches() {
+            Notification saved = saveDeadLetter(1L);
+
+            NotificationInfo.Detail result = notificationService.manualRetry(saved.getId(), 1L);
+
+            assertThat(result.status()).isEqualTo(NotificationStatus.PENDING);
+            Notification persisted = notificationJpaRepository.findById(saved.getId()).orElseThrow();
+            assertThat(persisted.getRetryCount()).isEqualTo(3);
+            verify(notificationEventListener, times(1)).handleNotificationCreated(any());
+        }
+
+        @DisplayName("DEAD_LETTER가 아니면 NOTIFICATION_RETRY_NOT_ALLOWED 예외가 발생한다.")
+        @Test
+        void throwsException_whenStatusIsNotDeadLetter() {
+            Notification pending = savePendingNotification(NotificationChannel.IN_APP);
+
+            BusinessException ex = assertThrows(BusinessException.class, () ->
+                    notificationService.manualRetry(pending.getId(), 1L));
+
+            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.NOTIFICATION_RETRY_NOT_ALLOWED);
+        }
+
+        @DisplayName("수신자가 아니면 NOTIFICATION_ACCESS_DENIED 예외가 발생한다.")
+        @Test
+        void throwsException_whenReceiverDoesNotMatch() {
+            Notification saved = saveDeadLetter(1L);
+
+            BusinessException ex = assertThrows(BusinessException.class, () ->
+                    notificationService.manualRetry(saved.getId(), 2L));
+
+            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.NOTIFICATION_ACCESS_DENIED);
         }
     }
 }
