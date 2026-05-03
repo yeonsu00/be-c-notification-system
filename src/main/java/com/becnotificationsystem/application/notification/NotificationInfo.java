@@ -9,6 +9,12 @@ import java.time.LocalDateTime;
 
 public class NotificationInfo {
 
+    public record ProcessResult(int attemptNumber, boolean success, String failureReason) {
+        public static ProcessResult of(int attemptNumber, boolean success, String failureReason) {
+            return new ProcessResult(attemptNumber, success, failureReason);
+        }
+    }
+
     public record Detail(
             Long notificationId,
             NotificationStatus status,
