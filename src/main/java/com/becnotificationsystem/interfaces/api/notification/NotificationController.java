@@ -7,6 +7,7 @@ import com.becnotificationsystem.application.notification.NotificationService;
 import com.becnotificationsystem.global.common.response.CommonApiResponse;
 import com.becnotificationsystem.global.common.response.PageResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -41,5 +42,13 @@ public class NotificationController {
             @RequestParam(required = false) Boolean readFilter,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return CommonApiResponse.success(notificationService.findByReceiverId(userId, readFilter, pageable), "조회 성공");
+    }
+
+    @PatchMapping("/{notificationId}/read")
+    public CommonApiResponse<NotificationInfo.ReadResult> markAsRead(
+            @PathVariable Long notificationId,
+            @RequestHeader("X-User-Id") Long userId) {
+        LocalDateTime readAt = LocalDateTime.now();
+        return CommonApiResponse.success(notificationService.markAsRead(notificationId, userId, readAt), "읽음 처리 성공");
     }
 }

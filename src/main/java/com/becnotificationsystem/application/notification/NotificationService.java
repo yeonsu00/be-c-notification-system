@@ -172,4 +172,24 @@ public class NotificationService {
         return notificationRepository.findDueScheduledNotifications(LocalDateTime.now())
                 .stream().map(Notification::getId).toList();
     }
+
+    @Transactional
+    public NotificationInfo.ReadResult markAsRead(Long notificationId, Long receiverId, LocalDateTime readAt) {
+        Notification notification = notificationRepository.findByIdAndDeletedFalse(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        if (NotificationChannel.isEmail(notification.getChannel())) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_NOT_SUPPORTED);
+        }
+        if (!notification.matchesReceiver(receiverId)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+        }
+
+        int updated = notificationRepository.compareAndSwap(notificationId, NotificationStatus.SENT, NotificationStatus.READ);
+        if (updated > 0) {
+            notification.markAsRead(readAt);
+        }
+
+        return NotificationInfo.ReadResult.from(notification);
+    }
 }
